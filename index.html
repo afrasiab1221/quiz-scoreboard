@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CGA competition scoreboard</title>
+<style>
+:root{--bg:#eaf1ee;--card:#fff;--ink:#14213d;--mute:#5b6b7a;--line:#cfdcd6;--acc:#0b7a5b;--accsoft:#d5ece4;--gold:#f2b705;--bar:#e3ebe7;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1a1a;--card:#172626;--ink:#e8f0ee;--mute:#9bb0aa;--line:#2b4040;--acc:#3fc79b;--accsoft:#1d3a33;--bar:#223535}}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:760px;margin:0 auto;padding:14px 14px 60px}
+h1{font-size:1.35rem;margin:0;font-weight:800;letter-spacing:-.01em}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.seg{display:inline-flex;background:var(--bar);border-radius:10px;padding:3px}
+.seg button{border:0;background:none;color:var(--mute);font:inherit;font-weight:700;padding:7px 14px;border-radius:8px;cursor:pointer}
+.seg button.on{background:var(--acc);color:#fff}
+nav{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:10px;border-bottom:2px solid var(--line)}
+nav button{flex:0 0 auto;border:0;background:none;color:var(--mute);font:inherit;font-weight:700;padding:9px 12px;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-8px}
+nav button.on{color:var(--ink);border-bottom-color:var(--acc)}
+.note{color:var(--mute);font-size:.9rem;margin:2px 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.ch{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+.ch b{font-size:1.05rem}
+.sc{font-weight:800;font-variant-numeric:tabular-nums;color:var(--acc)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+label{display:block;font-size:.82rem;color:var(--mute);margin-bottom:3px}
+select,input{width:100%;font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 8px;min-height:42px}
+select:focus-visible,input:focus-visible,button:focus-visible{outline:3px solid var(--acc);outline-offset:1px}
+.mem{display:grid;grid-template-columns:1.6fr 1fr;gap:6px;margin-top:6px}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:700;padding:8px 12px;border-radius:8px;cursor:pointer;margin-top:8px}
+.btn.danger{color:#b3261e}
+.row{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center}
+.rk{width:34px;height:34px;border-radius:50%;background:var(--bar);display:grid;place-items:center;font-weight:800}
+.row.first .rk{background:var(--gold);color:#14213d}
+.meter{height:8px;border-radius:4px;background:var(--bar);margin-top:6px;overflow:hidden}
+.meter i{display:block;height:100%;background:var(--acc)}
+.chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.chips span{font-size:.78rem;background:var(--accsoft);padding:2px 7px;border-radius:6px;font-variant-numeric:tabular-nums}
+.big{font-size:1.4rem;font-weight:800;font-variant-numeric:tabular-nums}
+.mm{font-size:.85rem;color:var(--mute)}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+<main>
+<div class="top"><h1>Competition scoreboard</h1>
+<div class="seg" id="cat"></div></div>
+<nav id="nav"></nav>
+<div id="view"></div>
+</main>
+<script>
+const KEY='cga-score-v1';
+const mk=n=>Array.from({length:6},(_,i)=>({name:'Team '+(i+1),m:[{n:'',c:''},{n:'',c:''},{n:'',c:''}],s:{}}));
+let S={cat:'O',tab:'teams',d:{O:mk(),FT:mk()}};
+try{const x=JSON.parse(localStorage.getItem(KEY)||'null');if(x&&x.d)S=x}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function rounds(c){
+ const r1=c==='O'?{id:'r1',t:'Round 1: Spelling and sentence',note:'5 words per team. 1 mark for the spelling, 1 mark for the sentence.',f:[['sp','Spellings correct',5],['se','Sentences correct',5]]}
+ :{id:'r1',t:'Round 1: Questions',note:'5 questions, 1 mark each. No sentence making.',f:[['q','Questions correct',5]]};
+ return [r1,
+ {id:'r2',t:'Round 2: Quick questions',note:'10 questions, 1 point each.',f:[['q','Correct answers',10]]},
+ {id:'r3',t:'Round 3: Two-part questions',note:'5 questions, 1+1 points each.',f:[['a','First points (1 each)',5],['b','Second points (1 each)',5]]},
+ {id:'r4',t:'Round 4: Story',note:'20 points, 5 for each part.',f:[['b','Beginning',5],['p','Problem',5],['c','Climax',5],['e','Ending',5]]},
+ {id:'r5',t:'Round 5: Pitch',note:'30 points in total.',f:[['en','English',10],['cd','Confidence and delivery',5],['og','Originality and usefulness',5],['bp','Business plan',5],['qa','Responses to judges’ questions',5]]}];
+}
+const rmax=r=>r.f.reduce((a,f)=>a+f[2],0);
+const rtot=(t,r)=>r.f.reduce((a,f)=>a+(+t.s[r.id+f[0]]||0),0);
+const ttot=(t,R)=>R.reduce((a,r)=>a+rtot(t,r),0);
+function head(){
+ document.getElementById('cat').innerHTML=[['O','O Levels'],['FT','FT']].map(([k,l])=>`<button class="${S.cat===k?'on':''}" data-cat="${k}">${l}</button>`).join('');
+ const R=rounds(S.cat);
+ const tabs=[['teams','Teams']].concat(R.map((r,i)=>[r.id,'Round '+(i+1)]),[['board','Leaderboard']]);
+ document.getElementById('nav').innerHTML=tabs.map(([k,l])=>`<button class="${S.tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('');
+}
+function render(){
+ head();
+ const T=S.d[S.cat],R=rounds(S.cat),v=document.getElementById('view');
+ if(S.tab==='teams'){
+  v.innerHTML='<p class="note">Enter each team’s name and its students. Names are saved on this device.</p>'+T.map((t,i)=>`<div class="card"><label>Team name</label><input data-tn="${i}" value="${esc(t.name)}">`+
+   t.m.map((m,j)=>`<div class="mem"><input placeholder="Student name" data-mn="${i}.${j}" value="${esc(m.n)}"><input placeholder="Class" data-mc="${i}.${j}" value="${esc(m.c)}"></div>`).join('')+
+   `<button class="btn" data-add="${i}">Add student</button></div>`).join('')+'<button class="btn danger" data-reset="1">Clear all scores and names for '+(S.cat==='O'?'O Levels':'FT')+'</button>';
+ }else if(S.tab==='board'){
+  const rows=T.map(t=>({t,tot:ttot(t,R)})).sort((a,b)=>b.tot-a.tot);
+  const max=R.reduce((a,r)=>a+rmax(r),0);let rk=0,prev=null;
+  v.innerHTML=`<p class="note">Out of ${max} points. Teams on the same total share a rank.</p>`+rows.map((x,i)=>{
+   if(x.tot!==prev){rk=i+1;prev=x.tot}
+   const names=x.t.m.filter(m=>m.n).map(m=>esc(m.n)+(m.c?' ('+esc(m.c)+')':'')).join(', ');
+   return `<div class="card row ${rk===1&&x.tot>0?'first':''}"><div class="rk">${rk}</div><div><b>${esc(x.t.name)}</b><div class="mm">${names||'No students entered'}</div>
+   <div class="meter"><i style="width:${max?x.tot/max*100:0}%"></i></div>
+   <div class="chips">${R.map((r,k)=>`<span>R${k+1}: ${rtot(x.t,r)}/${rmax(r)}</span>`).join('')}</div></div><div class="big">${x.tot}</div></div>`}).join('')+'<button class="btn" data-pdf="1">Export results as PDF</button>';
+ }else{
+  const r=R.find(r=>r.id===S.tab);
+  v.innerHTML=`<h2 style="margin:0 0 2px;font-size:1.1rem">${r.t}</h2><p class="note">${r.note} Out of ${rmax(r)}.</p>`+T.map((t,i)=>`<div class="card"><div class="ch"><b>${esc(t.name)}</b><span class="sc">${rtot(t,r)} / ${rmax(r)}</span></div><div class="grid">`+
+   r.f.map(f=>`<div><label>${f[1]}</label><select data-sc="${i}|${r.id+f[0]}"><option value="">Not scored</option>${Array.from({length:f[2]+1},(_,n)=>`<option value="${n}"${t.s[r.id+f[0]]==n&&t.s[r.id+f[0]]!==undefined&&t.s[r.id+f[0]]!==''?' selected':''}>${n}</option>`).join('')}</select></div>`).join('')+`</div></div>`).join('');
+ }
+}
+document.addEventListener('click',e=>{
+ const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+ if(d.cat){S.cat=d.cat;if(S.tab!=='teams'&&S.tab!=='board')S.tab='teams'}
+ else if(d.tab)S.tab=d.tab;
+ else if(d.add!==undefined)S.d[S.cat][+d.add].m.push({n:'',c:''});
+ else if(d.pdf){exportPDF();return}
+ else if(d.reset){if(!confirm('Clear everything for this category?'))return;S.d[S.cat]=mk()}
+ else return;
+ save();render();
+});
+document.addEventListener('input',e=>{
+ const d=e.target.dataset,T=S.d[S.cat];
+ if(d.tn!==undefined)T[+d.tn].name=e.target.value;
+ else if(d.mn){const[i,j]=d.mn.split('.');T[i].m[j].n=e.target.value}
+ else if(d.mc){const[i,j]=d.mc.split('.');T[i].m[j].c=e.target.value}
+ save();
+});
+document.addEventListener('change',e=>{
+ const d=e.target.dataset;
+ if(d.sc){const[i,k]=d.sc.split('|');S.d[S.cat][+i].s[k]=e.target.value;save();render()}
+});
+async function exportPDF(){
+ const dl=await claude.use('downloads').catch(()=>null);
+ if(!dl){alert('PDF saving is not available in this view. Open the published page in your browser and try again.');return}
+ if(!window.jspdf){alert('The PDF tool did not load. Check your connection and try again.');return}
+ const R=rounds(S.cat),T=S.d[S.cat],label=S.cat==='O'?'O Levels':'FT';
+ const max=R.reduce((a,r)=>a+rmax(r),0);
+ const val=(t,k)=>{const v=t.s[k];return(v===undefined||v==='')?null:+v};
+ let unscored=0;T.forEach(t=>R.forEach(r=>r.f.forEach(f=>{if(val(t,r.id+f[0])===null)unscored++})));
+ const rows=T.map(t=>({t,r:R.map(r=>rtot(t,r)),tot:ttot(t,R)}));
+ for(const x of rows){if(x.r.reduce((a,b)=>a+b,0)!==x.tot){alert('Calculation check failed for '+x.t.name+'. PDF not created.');return}}
+ rows.sort((a,b)=>b.tot-a.tot);
+ const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});
+ const ink=[20,33,61],acc=[11,122,91],soft=[213,236,228];
+ const cut=(s,w)=>doc.splitTextToSize(String(s),w)[0]||'';
+ doc.setTextColor(...ink);doc.setFont('helvetica','bold');doc.setFontSize(18);
+ doc.text('Competition results: '+label,15,20);
+ doc.setFont('helvetica','normal');doc.setFontSize(10);
+ doc.text('Cambridge Grads Academy. Printed '+new Date().toLocaleDateString('en-GB')+'. Maximum '+max+' points.',15,27);
+ doc.setTextColor(...(unscored?[179,38,30]:acc));
+ doc.text(unscored?('Warning: '+unscored+' score field(s) not entered. Totals count them as 0.'):'All score fields were entered.',15,33);
+ doc.setTextColor(...ink);
+ const cx=[15,27,77,97,117,137,157,177];
+ let y=42;
+ doc.setFillColor(...acc);doc.rect(15,y-6,180,9,'F');doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');
+ ['Rank','Team'].concat(R.map((r,i)=>'R'+(i+1)+' /'+rmax(r)),['Total /'+max]).forEach((h,i)=>doc.text(h,cx[i]+1,y));
+ doc.setTextColor(...ink);doc.setFont('helvetica','normal');y+=9;
+ let rk=0,prev=null;
+ rows.forEach((x,i)=>{
+  if(x.tot!==prev){rk=i+1;prev=x.tot}
+  if(i%2===0){doc.setFillColor(...soft);doc.rect(15,y-6,180,9,'F')}
+  doc.text(String(rk),cx[0]+1,y);doc.text(cut(x.t.name,48),cx[1]+1,y);
+  x.r.forEach((v,k)=>doc.text(String(v),cx[2+k]+1,y));
+  doc.setFont('helvetica','bold');doc.text(String(x.tot),cx[7]+1,y);doc.setFont('helvetica','normal');y+=9;
+ });
+ y+=6;doc.setFont('helvetica','bold');doc.text('Students',15,y);doc.setFont('helvetica','normal');y+=6;
+ rows.forEach(x=>{
+  const ns=x.t.m.filter(m=>m.n).map(m=>m.n+(m.c?' ('+m.c+')':'')).join(', ')||'No students entered';
+  const ls=doc.splitTextToSize(x.t.name+': '+ns,180);
+  if(y+ls.length*5>280){doc.addPage();y=20}
+  doc.text(ls,15,y);y+=ls.length*5+1;
+ });
+ for(const x of rows){
+  doc.addPage();y=20;
+  doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text(x.t.name,15,y);y+=7;
+  doc.setFont('helvetica','normal');doc.setFontSize(10);
+  const ns=x.t.m.filter(m=>m.n).map(m=>m.n+(m.c?' ('+m.c+')':'')).join(', ')||'No students entered';
+  const ls=doc.splitTextToSize(ns,180);doc.text(ls,15,y);y+=ls.length*5+4;
+  let sum=0;
+  for(const r of R){
+   doc.setFillColor(...soft);doc.rect(15,y-5,180,7,'F');doc.setFont('helvetica','bold');
+   doc.text(r.t,17,y);
+   y+=8;doc.setFont('helvetica','normal');let rs=0;
+   for(const f of r.f){
+    const v=val(x.t,r.id+f[0]);rs+=v||0;
+    doc.text(f[1],20,y);doc.text(v===null?'not entered':(v+' / '+f[2]),160,y);y+=6;
+   }
+   doc.setFont('helvetica','bold');doc.text('Round total',20,y);doc.text(rs+' / '+rmax(r),160,y);doc.setFont('helvetica','normal');y+=9;
+   sum+=rs;
+  }
+  if(sum!==x.tot){alert('Calculation check failed for '+x.t.name+'. PDF not created.');return}
+  doc.setFont('helvetica','bold');doc.setFontSize(13);doc.text('Team total',20,y);doc.text(sum+' / '+max,160,y);
+  doc.setFontSize(10);
+ }
+ try{await dl.save({filename:'CGA-'+S.cat+'-results.pdf',data:doc.output('blob')})}catch(e){if(!e||e.code!=='declined')alert('Could not save the PDF. Try again.')}
+}
+render();
+</script>
+</body>
+</html>
